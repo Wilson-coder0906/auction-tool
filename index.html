@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拍賣上架工具</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --border: #2e2e2e;
+    --accent: #ff6b35;
+    --accent2: #ffb347;
+    --text: #e8e8e8;
+    --text2: #888;
+    --text3: #555;
+    --success: #4caf50;
+    --error: #f44336;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .logo-dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+  .api-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .api-row input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+    width: 260px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .api-row input:focus { border-color: var(--accent); }
+  .api-status {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text3);
+    transition: background 0.3s;
+  }
+  .api-status.ok { background: var(--success); }
+
+  /* ── Layout ── */
+  main {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 0;
+    height: calc(100vh - 61px);
+  }
+
+  /* ── Left Panel ── */
+  .panel-left {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Drop Zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(255,107,53,0.05);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .drop-hint { color: var(--text2); font-size: 13px; }
+  .drop-hint strong { color: var(--accent); }
+
+  /* Image Grid */
+  .image-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .thumb {
+    aspect-ratio: 1;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+  }
+  .thumb img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  .thumb .remove {
+    position: absolute; top: 4px; right: 4px;
+    background: rgba(0,0,0,0.7);
+    border: none; border-radius: 50%;
+    color: #fff; cursor: pointer;
+    width: 20px; height: 20px;
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .thumb:hover .remove { opacity: 1; }
+
+  /* Analyse Button */
+  .btn-analyse {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-analyse:hover:not(:disabled) {
+    background: #ff8555;
+    transform: translateY(-1px);
+  }
+  .btn-analyse:disabled {
+    opacity: 0.4; cursor: not-allowed; transform: none;
+  }
+
+  /* Status log */
+  .log {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+    min-height: 80px;
+    max-height: 160px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .log .ok { color: var(--success); }
+  .log .err { color: var(--error); }
+  .log .info { color: var(--accent2); }
+
+  /* ── Right Panel ── */
+  .panel-right {
+    overflow-y: auto;
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Section label */
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 10px;
+  }
+
+  /* Form fields */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 12px;
+    color: var(--text2);
+    font-weight: 500;
+  }
+  .field input, .field textarea, .field select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    resize: vertical;
+  }
+  .field input:focus,
+  .field textarea:focus,
+  .field select:focus { border-color: var(--accent); }
+
+  .field input.loading,
+  .field textarea.loading {
+    animation: shimmer 1.5s infinite;
+    background: linear-gradient(90deg, var(--surface2) 25%, var(--surface) 50%, var(--surface2) 75%);
+    background-size: 200% 100%;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .char-count {
+    font-size: 11px;
+    color: var(--text3);
+    text-align: right;
+  }
+  .char-count.warn { color: var(--accent); }
+
+  /* Price row */
+  .price-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .price-hint {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .price-hint .market-price {
+    color: var(--accent2);
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Category pills */
+  .cat-display {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-height: 42px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .cat-display:hover { border-color: var(--accent); }
+  .cat-pill {
+    background: rgba(255,107,53,0.15);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+  }
+  .cat-sep { color: var(--text3); font-size: 11px; }
+
+  /* Condition toggle */
+  .cond-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .cond-btn {
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+    color: var(--text2);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .cond-btn.active {
+    border-color: var(--accent);
+    background: rgba(255,107,53,0.12);
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* Submit section */
+  .submit-section {
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .btn-submit {
+    flex: 1;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-submit:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(255,107,53,0.3);
+  }
+  .btn-submit:disabled {
+    opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none;
+  }
+  .btn-dryrun {
+    padding: 14px 18px;
+    background: var(--surface2);
+    color: var(--text2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .btn-dryrun:hover { border-color: var(--text2); color: var(--text); }
+
+  /* CDP status bar */
+  .cdp-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .cdp-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--error);
+    transition: background 0.3s;
+    flex-shrink: 0;
+  }
+  .cdp-dot.connected { background: var(--success); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-dot"></span>
+    拍賣上架工具
+  </div>
+  <div class="api-row">
+    <span style="font-size:12px;color:var(--text2)">Claude API Key</span>
+    <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off">
+    <div class="api-status" id="apiStatus"></div>
+    <button onclick="saveKey()" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 12px;cursor:pointer;font-family:inherit;font-size:12px">儲存</button>
+  </div>
+</header>
+
+<main>
+  <!-- ── 左側：照片上傳 ── -->
+  <div class="panel-left">
+
+    <div>
+      <div class="section-label">商品照片</div>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <span class="drop-icon">📷</span>
+        <div>拖曳照片到這裡</div>
+        <div class="drop-hint">或點擊選取，支援 <strong>JPG / PNG / HEIC</strong></div>
+      </div>
+    </div>
+
+    <div class="image-grid" id="imageGrid"></div>
+
+    <button class="btn-analyse" id="btnAnalyse" disabled onclick="analyseImages()">
+      <span id="analyseIcon">✦</span>
+      <span id="analyseText">AI 辨識商品</span>
+    </button>
+
+    <div>
+      <div class="section-label">執行記錄</div>
+      <div class="log" id="log">等待操作...<br></div>
+    </div>
+
+    <div>
+      <div class="section-label">Chrome CDP 連線</div>
+      <div class="cdp-bar">
+        <div class="cdp-dot" id="cdpDot"></div>
+        <span id="cdpStatus">未連線</span>
+        <button onclick="testCDP()" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:5px;color:var(--text2);padding:3px 10px;cursor:pointer;font-size:11px;font-family:inherit">測試連線</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── 右側：拍賣資訊 ── -->
+  <div class="panel-right">
+
+    <div class="section-label">拍賣資訊</div>
+
+    <div class="field">
+      <label>商品標題 <span style="color:var(--text3)">(最多 60 字)</span></label>
+      <input type="text" id="title" maxlength="60" placeholder="等待 AI 辨識..." oninput="updateCharCount()">
+      <div class="char-count" id="titleCount">0 / 60</div>
+    </div>
+
+    <div class="field">
+      <label>商品簡述 <span style="color:var(--text3)">(最多 30 字)</span></label>
+      <input type="text" id="subtitle" maxlength="30" placeholder="一句話描述重點">
+    </div>
+
+    <div class="field">
+      <label>商品分類</label>
+      <div class="cat-display" id="catDisplay" onclick="editCategory()">
+        <span style="color:var(--text3);font-size:13px">等待辨識後自動填入...</span>
+      </div>
+      <input type="hidden" id="categoryJson" value="[]">
+    </div>
+
+    <div class="field">
+      <label>商品狀態</label>
+      <div class="cond-row">
+        <button class="cond-btn active" id="condUsed" onclick="setCondition('used')">二手</button>
+        <button class="cond-btn" id="condNew" onclick="setCondition('new')">全新</button>
+      </div>
+    </div>
+
+    <div class="price-row">
+      <div class="field">
+        <label>售價（NT$）</label>
+        <input type="number" id="price" placeholder="0" min="1">
+      </div>
+      <div class="field">
+        <label>市場行情參考</label>
+        <div class="price-hint">
+          <span>約</span>
+          <span class="market-price" id="marketPrice">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>商品描述</label>
+      <textarea id="description" rows="10" placeholder="等待 AI 辨識後自動生成..."></textarea>
+    </div>
+
+    <div class="submit-section">
+      <button class="btn-dryrun" onclick="submitListing(true)">測試（不送出）</button>
+      <button class="btn-submit" id="btnSubmit" disabled onclick="submitListing(false)">
+        開始上架 →
+      </button>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// ── 狀態 ──────────────────────────────────────────────────────────────────────
+const state = {
+  images: [],       // { file, dataUrl, base64 }
+  condition: 'used',
+  analysed: false,
+};
+
+// ── API Key 管理 ──────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('claudeApiKey');
+  if (saved) {
+    document.getElementById('apiKey').value = saved;
+    document.getElementById('apiStatus').classList.add('ok');
+  }
+});
+
+function saveKey() {
+  const key = document.getElementById('apiKey').value.trim();
+  if (!key) return;
+  localStorage.setItem('claudeApiKey', key);
+  document.getElementById('apiStatus').classList.add('ok');
+  addLog('✓ API Key 已儲存', 'ok');
+}
+
+function getKey() {
+  return document.getElementById('apiKey').value.trim() ||
+         localStorage.getItem('claudeApiKey') || '';
+}
+
+// ── 日誌 ──────────────────────────────────────────────────────────────────────
+function addLog(msg, type = '') {
+  const log = document.getElementById('log');
+  const line = document.createElement('span');
+  if (type) line.className = type;
+  line.textContent = msg + '\n';
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── 圖片處理 ──────────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  handleFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', () => handleFiles([...fileInput.files]));
+
+function handleFiles(files) {
+  files.filter(f => f.type.startsWith('image/')).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      const base64 = dataUrl.split(',')[1];
+      const mediaType = file.type || 'image/jpeg';
+      state.images.push({ file, dataUrl, base64, mediaType });
+      renderGrid();
+      updateButtons();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderGrid() {
+  const grid = document.getElementById('imageGrid');
+  grid.innerHTML = '';
+  state.images.forEach((img, i) => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.innerHTML = `
+      <img src="${img.dataUrl}">
+      <button class="remove" onclick="removeImage(${i})">✕</button>
+    `;
+    grid.appendChild(div);
+  });
+}
+
+function removeImage(i) {
+  state.images.splice(i, 1);
+  renderGrid();
+  updateButtons();
+}
+
+function updateButtons() {
+  const hasImages = state.images.length > 0;
+  document.getElementById('btnAnalyse').disabled = !hasImages;
+  document.getElementById('btnSubmit').disabled = !state.analysed;
+}
+
+function updateCharCount() {
+  const val = document.getElementById('title').value.length;
+  const el = document.getElementById('titleCount');
+  el.textContent = `${val} / 60`;
+  el.className = 'char-count' + (val > 50 ? ' warn' : '');
+}
+
+function setCondition(cond) {
+  state.condition = cond;
+  document.getElementById('condUsed').classList.toggle('active', cond === 'used');
+  document.getElementById('condNew').classList.toggle('active', cond === 'new');
+}
+
+// ── AI 辨識 ──────────────────────────────────────────────────────────────────
+async function analyseImages() {
+  const key = getKey();
+  if (!key) { addLog('❌ 請先輸入 Claude API Key', 'err'); return; }
+  if (state.images.length === 0) return;
+
+  const btn = document.getElementById('btnAnalyse');
+  btn.disabled = true;
+  document.getElementById('analyseText').textContent = '辨識中...';
+
+  // 設定 loading 狀態
+  ['title','subtitle','description'].forEach(id => {
+    document.getElementById(id).classList.add('loading');
+  });
+
+  addLog('→ 傳送照片給 Claude 辨識...', 'info');
+
+  // 準備 vision 請求（最多 4 張）
+  const imgs = state.images.slice(0, 4);
+  const content = [
+    ...imgs.map(img => ({
+      type: 'image',
+      source: { type: 'base64', media_type: img.mediaType, data: img.base64 }
+    })),
+    {
+      type: 'text',
+      text: `請辨識這些商品照片，並同時搜尋 Yahoo 拍賣的市場行情，輸出以下 JSON（只輸出 JSON，不要其他文字）：
+{
+  "title": "【品牌】特徵 尺寸 成色（最多60字，吸引買家的標題）",
+  "subtitle": "一句話重點描述（最多30字）",
+  "brand": "品牌名稱",
+  "item_name": "商品名稱",
+  "color": "顏色",
+  "size": "尺寸或規格",
+  "condition_text": "幾成新的描述",
+  "condition_code": "used 或 new",
+  "category": ["Yahoo拍賣主分類", "子分類", "細分類"],
+  "market_price_low": 最低參考價格數字,
+  "market_price_high": 最高參考價格數字,
+  "suggested_price": 建議售價數字,
+  "description": "完整商品描述，包含品牌/商品/顏色/尺寸/狀況/注意事項，格式美觀，用換行分段"
+}`
+    }
+  ];
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content }]
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error?.message || resp.statusText);
+    }
+
+    const data = await resp.json();
+    const raw = data.content[0].text.trim();
+    const jsonStr = raw.replace(/^```json?\s*/,'').replace(/\s*```$/,'');
+    const result = JSON.parse(jsonStr);
+
+    // 填入欄位
+    document.getElementById('title').value = result.title || '';
+    document.getElementById('subtitle').value = result.subtitle || '';
+    document.getElementById('description').value = result.description || '';
+    document.getElementById('price').value = result.suggested_price || '';
+    document.getElementById('categoryJson').value = JSON.stringify(result.category || []);
+    updateCharCount();
+
+    // 市場行情
+    if (result.market_price_low && result.market_price_high) {
+      document.getElementById('marketPrice').textContent =
+        `NT$${result.market_price_low.toLocaleString()} ～ ${result.market_price_high.toLocaleString()}`;
+    }
+
+    // 分類顯示
+    renderCategory(result.category || []);
+
+    // 成色
+    if (result.condition_code) setCondition(result.condition_code);
+
+    state.analysed = true;
+    updateButtons();
+    addLog(`✓ 辨識完成：${result.brand || ''} ${result.item_name || ''}`, 'ok');
+    addLog(`  建議售價：NT$${result.suggested_price?.toLocaleString() || '—'}`, 'ok');
+
+  } catch (e) {
+    addLog(`❌ 辨識失敗：${e.message}`, 'err');
+  } finally {
+    ['title','subtitle','description'].forEach(id => {
+      document.getElementById(id).classList.remove('loading');
+    });
+    btn.disabled = false;
+    document.getElementById('analyseText').textContent = 'AI 辨識商品';
+  }
+}
+
+function renderCategory(cats) {
+  const el = document.getElementById('catDisplay');
+  if (!cats || cats.length === 0) {
+    el.innerHTML = '<span style="color:var(--text3);font-size:13px">點擊手動輸入分類</span>';
+    return;
+  }
+  el.innerHTML = cats.map((c, i) =>
+    `<span class="cat-pill">${c}</span>${i < cats.length-1 ? '<span class="cat-sep">›</span>' : ''}`
+  ).join('');
+}
+
+function editCategory() {
+  const cur = JSON.parse(document.getElementById('categoryJson').value || '[]');
+  const input = prompt('輸入分類路徑（用逗號分隔）\n例如：3C產品,手機,Android手機', cur.join(','));
+  if (input === null) return;
+  const cats = input.split(',').map(s => s.trim()).filter(Boolean);
+  document.getElementById('categoryJson').value = JSON.stringify(cats);
+  renderCategory(cats);
+}
+
+// ── CDP 連線測試 ──────────────────────────────────────────────────────────────
+async function testCDP() {
+  addLog('→ 測試 CDP 連線（localhost:9222）...', 'info');
+  try {
+    // 從本機的 Chrome CDP 取得 tab 列表
+    // 注意：需要 Chrome 以 --remote-debugging-port=9222 啟動
+    const resp = await fetch('http://localhost:9222/json', { mode: 'no-cors' });
+    // no-cors 模式下即使成功也拿不到內容，但能判斷是否有回應
+    document.getElementById('cdpDot').classList.add('connected');
+    document.getElementById('cdpStatus').textContent = '已連線 localhost:9222';
+    addLog('✓ Chrome CDP 連線正常', 'ok');
+  } catch {
+    // 大多數瀏覽器因 CORS 會擋，改用 WebSocket 測試
+    try {
+      const ws = new WebSocket('ws://localhost:9222');
+      ws.onopen = () => {
+        document.getElementById('cdpDot').classList.add('connected');
+        document.getElementById('cdpStatus').textContent = '已連線 localhost:9222';
+        addLog('✓ Chrome CDP 連線正常', 'ok');
+        ws.close();
+      };
+      ws.onerror = () => {
+        addLog('❌ 無法連線 Chrome CDP，請確認 Chrome 已用正確參數啟動', 'err');
+      };
+      setTimeout(() => { if (ws.readyState === 0) ws.close(); }, 3000);
+    } catch(e2) {
+      addLog(`❌ CDP 測試失敗：${e2.message}`, 'err');
+    }
+  }
+}
+
+// ── 上架執行 ──────────────────────────────────────────────────────────────────
+async function submitListing(dryRun = false) {
+  const title = document.getElementById('title').value.trim();
+  const price = parseInt(document.getElementById('price').value);
+  const category = JSON.parse(document.getElementById('categoryJson').value || '[]');
+
+  if (!title) { addLog('❌ 請填寫商品標題', 'err'); return; }
+  if (!price || price < 1) { addLog('❌ 請填寫售價', 'err'); return; }
+
+  const data = {
+    title,
+    subtitle: document.getElementById('subtitle').value.trim(),
+    description: document.getElementById('description').value.trim(),
+    category,
+    condition: state.condition,
+    price,
+    quantity: 1,
+    images: [],  // 圖片透過 CDP 上傳，需另行處理
+  };
+
+  if (dryRun) {
+    addLog('→ [測試模式] 準備的上架資料：', 'info');
+    addLog(JSON.stringify(data, null, 2));
+    addLog('✓ 測試完成（未實際上架）', 'ok');
+    return;
+  }
+
+  addLog('→ 開始透過 CDP 控制 Chrome 上架...', 'info');
+  addLog('  ⚠ 此功能需搭配本機 yahoo_auction.py 腳本', 'info');
+
+  // 將資料存到 localStorage 讓腳本讀取
+  // 實際上架需要透過 yahoo_auction.py（從隨身碟執行）
+  localStorage.setItem('pendingAuction', JSON.stringify(data));
+
+  addLog('→ 上架資料已準備好，請在終端機執行：', 'info');
+  addLog(`  python3 /Volumes/[隨身碟名稱]/yahoo_auction.py \\`, 'info');
+  addLog(`    --host localhost --file /tmp/auction.json`, 'info');
+  addLog('  （或使用 Hermes 的 /run yahoo-auction 指令）', 'info');
+
+  // 嘗試直接透過 WebSocket 控制本機 Chrome
+  await runViaCDP(data, dryRun);
+}
+
+async function runViaCDP(data, dryRun) {
+  try {
+    // 取得 Chrome tab 的 WebSocket URL
+    const tabsResp = await fetch('http://localhost:9222/json');
+    const tabs = await tabsResp.json();
+    const page = tabs.find(t => t.type === 'page');
+    if (!page) throw new Error('找不到 Chrome tab');
+
+    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    let msgId = 1;
+    const pending = {};
+
+    ws.onmessage = e => {
+      const msg = JSON.parse(e.data);
+      if (msg.id && pending[msg.id]) {
+        pending[msg.id](msg.result);
+        delete pending[msg.id];
+      }
+    };
+
+    const send = (method, params = {}) => new Promise(resolve => {
+      const id = msgId++;
+      pending[id] = resolve;
+      ws.send(JSON.stringify({ id, method, params }));
+    });
+
+    const js = (expr) => send('Runtime.evaluate', {
+      expression: expr, awaitPromise: true, returnByValue: true
+    }).then(r => r?.result?.value);
+
+    await new Promise(r => { ws.onopen = r; });
+    addLog('✓ WebSocket CDP 連線成功', 'ok');
+
+    if (!dryRun) {
+      // 導航到上架頁面
+      await send('Page.navigate', { url: 'https://tw.bid.yahoo.com/partner/merchandise/select_type' });
+      addLog('→ 已開啟 Yahoo 拍賣上架頁面', 'info');
+      await new Promise(r => setTimeout(r, 3000));
+
+      // 點選直購商品
+      await js(`
+        (function(){
+          const btns = Array.from(document.querySelectorAll('button,a,div'));
+          const t = btns.find(el => el.textContent.trim().includes('直購商品'));
+          if(t){t.click();return 'ok';}return 'fail';
+        })()
+      `);
+      addLog('→ 已點選直購商品', 'info');
+      await new Promise(r => setTimeout(r, 3000));
+
+      // 選擇分類
+      if (data.category.length > 0) {
+        addLog(`→ 選擇分類：${data.category.join(' > ')}`, 'info');
+        await js(`document.querySelector('yec-category-picker')?.click()`);
+        await new Promise(r => setTimeout(r, 1500));
+
+        for (const cat of data.category) {
+          await js(`
+            (function(){
+              const picker = document.querySelector('yec-category-picker');
+              if(!picker?.shadowRoot) return 'no_picker';
+              const items = Array.from(picker.shadowRoot.querySelectorAll('a,li,span'));
+              const t = items.find(el => el.textContent.trim() === '${cat.replace(/'/g,"\\'")}')
+                     || items.find(el => el.textContent.trim().includes('${cat.replace(/'/g,"\\'")}'));
+              if(t){t.click();return 'ok';}return 'fail';
+            })()
+          `);
+          await new Promise(r => setTimeout(r, 1200));
+        }
+
+        await js(`
+          (function(){
+            const picker = document.querySelector('yec-category-picker');
+            picker?.shadowRoot?.querySelector('button.buttons.submits__confirm')?.click();
+          })()
+        `);
+        await new Promise(r => setTimeout(r, 800));
+        addLog('  ✓ 分類已選擇', 'ok');
+      }
+
+      // 填寫標題和簡述
+      const title = data.title.replace(/'/g, "\\'");
+      const subtitle = (data.subtitle || '').replace(/'/g, "\\'");
+      await js(`
+        (function(){
+          function fill(sel, val){
+            const el = document.querySelector(sel);
+            if(!el) return;
+            const s = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+            s.call(el, val);
+            el.dispatchEvent(new Event('input',{bubbles:true}));
+            el.dispatchEvent(new Event('change',{bubbles:true}));
+          }
+          fill('input[name="item-name"]', '${title}');
+          fill('input[name="item-subtitle"]', '${subtitle}');
+        })()
+      `);
+      addLog('  ✓ 標題已填入', 'ok');
+
+      // 填寫描述
+      const desc = data.description.replace(/\n/g, '<br>').replace(/`/g, '\\`').replace(/'/g, "\\'");
+      await js(`
+        (function(){
+          document.querySelectorAll('.jodit-container').forEach(c=>c.classList.remove('jodit_fullsize'));
+          document.body.style.overflow='auto';
+          const ed = document.querySelector('.jodit-wysiwyg');
+          if(ed){ ed.innerHTML='${desc}'; ed.dispatchEvent(new Event('input',{bubbles:true})); }
+        })()
+      `);
+      addLog('  ✓ 描述已填入', 'ok');
+
+      // 設定狀態
+      await js(`document.querySelector('input[value="${data.condition}"]')?.click()`);
+
+      // 設定價格
+      await js(`
+        (function(){
+          function fill(sel, val){
+            const el = document.querySelector(sel);
+            if(!el) return;
+            const s = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+            s.call(el, String(val));
+            el.dispatchEvent(new Event('input',{bubbles:true}));
+            el.dispatchEvent(new Event('change',{bubbles:true}));
+          }
+          fill('input[name="item-price"]', ${data.price});
+          fill('input[name="item-amount"]', 1);
+        })()
+      `);
+      addLog(`  ✓ 售價 NT$${data.price.toLocaleString()} 已填入`, 'ok');
+
+      addLog('✅ 所有欄位填寫完畢！請在 Chrome 確認後手動按「確定新增」', 'ok');
+      addLog('   （最後送出保留給您親自確認）', '');
+    }
+
+    ws.close();
+
+  } catch (e) {
+    addLog(`❌ CDP 控制失敗：${e.message}`, 'err');
+    addLog('  請確認 Chrome 是以 --remote-debugging-port=9222 啟動', '');
+  }
+}
+</script>
+</body>
+</html>
